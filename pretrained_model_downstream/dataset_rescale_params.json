@@ -1,0 +1,9 @@
+{
+    "scale_output": [
+        "standardize"
+    ],
+    "standardize": {
+        "scale_mean_factor": 6.713809967041016,
+        "scale_std_factor": 1.615639090538025
+    }
+}

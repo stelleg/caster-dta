@@ -1,0 +1,1 @@
+/home/rachitk/.conda/envs/dta/bin/python train_model.py --dataset bindingdb --seed 9 --out-folder logs/testing/20241217__23_09_31

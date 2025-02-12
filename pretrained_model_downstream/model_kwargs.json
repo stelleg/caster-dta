@@ -1,0 +1,65 @@
+{
+    "protein_gnn_kwargs": {
+        "base_conv": "lbamodel",
+        "in_channels": [
+            17,
+            3
+        ],
+        "edge_dim": [
+            32,
+            1
+        ],
+        "num_ntypes": 20,
+        "num_etypes": 1,
+        "ntype_emb_dim": null,
+        "etype_emb_dim": null,
+        "num_convs": 2,
+        "hidden_channels": [
+            16,
+            4
+        ],
+        "edge_hidden_channels": [
+            32,
+            1
+        ],
+        "out_channels": 64,
+        "dropout_rate": 0.2,
+        "activation": "leaky_relu",
+        "aggr": "sum"
+    },
+    "molecule_gnn_kwargs": {
+        "base_conv": "gine",
+        "in_channels": 41,
+        "edge_dim": 9,
+        "num_ntypes": 11,
+        "num_etypes": 5,
+        "ntype_emb_dim": null,
+        "etype_emb_dim": null,
+        "num_convs": 2,
+        "hidden_channels": 16,
+        "out_channels": 64,
+        "dropout_rate": 0.2,
+        "activation": "leaky_relu",
+        "aggr": "sum",
+        "gin_trainable_eps": true
+    },
+    "joint_gnn_kwargs": {
+        "residue_lin_depth": 1,
+        "atom_lin_depth": 1,
+        "n_attention_heads": 8,
+        "attention_dropout": 0.0,
+        "protein_lin_depth": 1,
+        "molecule_lin_depth": 1,
+        "pairwise_embedding_dim": 512,
+        "out_lin_depth": 1,
+        "out_lin_factor": 0.5,
+        "out_lin_norm_type": null,
+        "activation": "leaky_relu",
+        "dropout": 0.1,
+        "element_pooling": "mean",
+        "include_residual_stream": true,
+        "residual_dim_ff_scale": 2,
+        "num_cross_attn_layers": 1,
+        "include_post_pool_layernorm": false
+    }
+}

@@ -1,0 +1,17 @@
+{
+    "sparse_edges": false,
+    "protein_dist_units": "angstroms",
+    "protein_edge_thresh": 4,
+    "protein_thresh_type": "dist",
+    "protein_keep_selfloops": true,
+    "protein_vector_features": true,
+    "protein_include_esm2": false,
+    "protein_include_residue_posenc": false,
+    "protein_include_aa_props": true,
+    "molecule_full_atomtype": false,
+    "molecule_onehot_ordinal_feats": false,
+    "molecule_include_selfloops": true,
+    "scale_output": [
+        "standardize"
+    ]
+}

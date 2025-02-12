@@ -1,0 +1,20 @@
+### ColabFold
+
+"""
+We ran ColabFold using Singularity, which led to the following setup commands:
+(all of these were run in ./ext-packages/colabfold/)
+
+All of the commands in question (and their Docker equivalents) are at this link:
+https://github.com/sokrypton/ColabFold/wiki/Running-ColabFold-in-Docker
+"""
+
+# Pull Singularity container
+singularity pull colabfold.sif docker://ghcr.io/sokrypton/colabfold:1.5.5-cuda12.2.2
+
+# Make the weights cache directory
+mkdir ./cache
+
+# Download the weights into this cache using the container
+singularity run -B ./cache:/cache \
+  colabfold.sif \
+  python -m colabfold.download
