@@ -1,0 +1,29 @@
+*secret*
+.DS_Store
+__pycache__
+
+/data/
+**/.vscode
+**/docs
+
+**/*.csv
+**/*.tsv
+**/*.txt
+**/*.png
+**/*.npz
+**/*.pt
+**/*.pdf
+**/*.svg
+**/*.pdb
+**/*.pkl
+
+testing.py
+
+# Allow colabfold setup instructions
+!ext-packages/colabfold/setup_info.txt
+
+# Allow all files in pretrained model folder
+!pretrained_model_downstream/*
+
+# Allow requirements
+!requirements.txt
