@@ -1,8 +1,7 @@
 *secret*
-.DS_Store
+**/.DS_Store
 __pycache__
 
-/data/
 **/.vscode
 **/docs
 
@@ -27,3 +26,6 @@ testing.py
 
 # Allow requirements
 !requirements.txt
+
+# Allow all data files
+!data/**/*
