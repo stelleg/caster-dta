@@ -17,6 +17,7 @@ import ipdb
 
 def process_data(proteins, ligands, affinity=None,
                  data_path='./data/deepdta_data/davis', 
+                 known_pdb_ids=None,
                  pdb_dir_name='pdb_files',
                  overwrite_csv=True, 
                  skip_pdb_dl=False, overwrite_pdb=False, 
@@ -91,6 +92,7 @@ def process_data(proteins, ligands, affinity=None,
         all_success_dls = download_pdb_files(unique_prot_data['protein_id'], 
                                             unique_prot_data['protein_sequence'], 
                                             unique_prot_data['protein_file'],
+                                            known_pdb_ids=known_pdb_ids,
                                             overwrite=overwrite_pdb,
                                             allow_complexed_pdb=allow_complexed_pdb,
                                             verbose_pdb_dl=verbose_pdb_dl)
@@ -141,7 +143,7 @@ def process_data(proteins, ligands, affinity=None,
     return processed_data
 
 
-def download_pdb_files(prot_ids, prot_seqs, out_paths, 
+def download_pdb_files(prot_ids, prot_seqs, out_paths, known_pdb_ids=None,
                        overwrite=True, allow_complexed_pdb=False,
                        verbose_pdb_dl=False):
     """
@@ -158,68 +160,89 @@ def download_pdb_files(prot_ids, prot_seqs, out_paths,
 
     all_success_dls = []
 
-    for prot_id, prot_seq, out_path in zip(prot_ids, prot_seqs, out_paths):
-        prot_ver = None
+    # if we know the pdb_ids we want, just use those
+    if known_pdb_ids is not None:
+        for prot_id, pdb_id, out_path in zip(prot_ids, known_pdb_ids, out_paths):
+            search_record_fpath = out_path.replace('.pdb', '_search_record.txt')
 
-        search_record_fpath = out_path.replace('.pdb', '_search_record.txt')
+            if os.path.exists(out_path) and not overwrite:
+                print(f"PDB file {out_path} already exists, skipping download...")
+                all_success_dls.append(prot_id)
+                continue
 
-        if os.path.exists(out_path) and not overwrite:
-            print(f"PDB file {out_path} already exists, skipping download...")
-            all_success_dls.append(prot_id)
-            continue
+            if os.path.exists(search_record_fpath) and not overwrite:
+                print(f"Search record file {search_record_fpath} already exists (PDB file does not). Skipping search and download...")
+                continue
 
-        if os.path.exists(search_record_fpath) and not overwrite:
-            print(f"Search record file {search_record_fpath} already exists (PDB file does not). Skipping search and download...")
-            continue
+            _select_and_download_pdb([pdb_id + "_1"], out_path)
 
-        # Download the PDB file
-        print(f"Downloading PDB file for protein {prot_id}. ", end="", flush=True)
+            with open(search_record_fpath, 'w') as f:
+                f.write(f"Search options: {pdb_id}_1\n")
+                f.write(f"Date: {pd.Timestamp.now()}")
+        
+    else:
+        for prot_id, prot_seq, out_path in zip(prot_ids, prot_seqs, out_paths):
+            prot_ver = None
 
-        # Perform experimental query using RCSB API and check for acceptable results     
-        exp_res = get_rcsb_res(prot_seq, query_type="experimental", allow_complex=allow_complexed_pdb)
-        acceptable_results = check_pdb_result(exp_res, res_type='experimental')
+            search_record_fpath = out_path.replace('.pdb', '_search_record.txt')
 
-        # If no experimental perfect matches, get computational structure instead
-        # This will almost certainly be an AlphaFold2-folded protein
-        if(len(acceptable_results) == 0):
-            print(f"No experimental... ", end="", flush=True)
+            if os.path.exists(out_path) and not overwrite:
+                print(f"PDB file {out_path} already exists, skipping download...")
+                all_success_dls.append(prot_id)
+                continue
 
-            # Perform computational query using RCSB API and check for acceptable results
-            comp_res = get_rcsb_res(prot_seq, query_type="computational", allow_complex=allow_complexed_pdb)
-            acceptable_results = check_pdb_result(comp_res, res_type='computational')
+            if os.path.exists(search_record_fpath) and not overwrite:
+                print(f"Search record file {search_record_fpath} already exists (PDB file does not). Skipping search and download...")
+                continue
 
+            # Download the PDB file
+            print(f"Downloading PDB file for protein {prot_id}. ", end="", flush=True)
+
+            # Perform experimental query using RCSB API and check for acceptable results     
+            exp_res = get_rcsb_res(prot_seq, query_type="experimental", allow_complex=allow_complexed_pdb)
+            acceptable_results = check_pdb_result(exp_res, res_type='experimental')
+
+            # If no experimental perfect matches, get computational structure instead
+            # This will almost certainly be an AlphaFold2-folded protein
             if(len(acceptable_results) == 0):
-                print(f"No computational - skipping.")
+                print(f"No experimental... ", end="", flush=True)
+
+                # Perform computational query using RCSB API and check for acceptable results
+                comp_res = get_rcsb_res(prot_seq, query_type="computational", allow_complex=allow_complexed_pdb)
+                acceptable_results = check_pdb_result(comp_res, res_type='computational')
+
+                if(len(acceptable_results) == 0):
+                    print(f"No computational - skipping.")
+                else:
+                    print(f"Computational found.")
+                    prot_ver = 'computational'
+
             else:
-                print(f"Computational found.")
-                prot_ver = 'computational'
-
-        else:
-            print(f"Experimental found.")
-            prot_ver = 'experimental'
+                print(f"Experimental found.")
+                prot_ver = 'experimental'
 
 
-        if(len(acceptable_results) > 0):
-            chosen_pdb_accession = _select_and_download_pdb(acceptable_results, out_path, prot_ver)
-        else:
-            chosen_pdb_accession = None
+            if(len(acceptable_results) > 0):
+                chosen_pdb_accession = _select_and_download_pdb(acceptable_results, out_path, prot_ver)
+            else:
+                chosen_pdb_accession = None
 
-        if(chosen_pdb_accession is not None):
-            all_success_dls.append(prot_id)
+            if(chosen_pdb_accession is not None):
+                all_success_dls.append(prot_id)
 
-        print(f"\tOptions: {acceptable_results}")
-        print(f"\tChosen: {chosen_pdb_accession}")
-        # print(f"\tSeq: {prot_seq}")
+            print(f"\tOptions: {acceptable_results}")
+            print(f"\tChosen: {chosen_pdb_accession}")
+            # print(f"\tSeq: {prot_seq}")
 
-        # Save the record that we searched for this protein in the past
-        # so we can skip doing so in the future if needed
-        # (this will be a simple text file with the options and chosen above
-        # as well as the current date and time)
-        with open(search_record_fpath, 'w') as f:
-            f.write(f"Search options: {acceptable_results}\n")
-            f.write(f"Chosen: {chosen_pdb_accession}\n")
-            f.write(f"Sequence: {prot_seq}\n")
-            f.write(f"Date: {pd.Timestamp.now()}")
+            # Save the record that we searched for this protein in the past
+            # so we can skip doing so in the future if needed
+            # (this will be a simple text file with the options and chosen above
+            # as well as the current date and time)
+            with open(search_record_fpath, 'w') as f:
+                f.write(f"Search options: {acceptable_results}\n")
+                f.write(f"Chosen: {chosen_pdb_accession}\n")
+                f.write(f"Sequence: {prot_seq}\n")
+                f.write(f"Date: {pd.Timestamp.now()}")
 
         
     return all_success_dls
@@ -419,6 +442,7 @@ def check_pdb_result(rcsb_res_list, res_type='experimental'):
 
     for res in rcsb_res_list:
         seq_id = res['identifier']
+        print("checking ", seq_id)
 
         # Figure out which one is the sequence service type
         res_sequence = None
@@ -428,24 +452,27 @@ def check_pdb_result(rcsb_res_list, res_type='experimental'):
 
         # Check if the sequence identity is 100%
         seq_id_check = res_sequence[0]['match_context'][0]['sequence_identity'] == 1.0
-        
+
+        # Check if score is 1 
+        score_check = res['score'] == 1.0
+
         # Check if the sequence alignment is perfect (query_length == subject_length)
         length_match_check = res_sequence[0]['match_context'][0]['query_length'] == res_sequence[0]['match_context'][0]['subject_length']
-        
 
         # Add computational specific checks here (if any)
         if(res_type == 'computational'):
             pass
-
 
         # Add experimental specific checks here (if any)
         if(res_type == 'experimental'):
             pass
 
         # If both checks pass, then add to the list of good results
-        if(seq_id_check and length_match_check):
+        if(seq_id_check and length_match_check and score_check):
             good_results.append(seq_id)
     
+
+    #if there are no good results relax the requirement:
     return good_results
 
 
@@ -514,17 +541,18 @@ def get_rcsb_res(prot_seq, query_type="experimental", allow_complex=False):
 
         # Allow a structure where is binding to a ligand if specified
         if(not allow_complex):
-            full_query = full_query & ligand_attrib & protein_only_attrib
+            full_query = prot_seq_query & ligand_attrib & protein_only_attrib
 
         res = full_query("polymer_entity", return_content_type=["experimental"], results_verbosity='verbose')
 
     else:
         # Computational results from AlphaFold2 are always ligand-less (so we can drop that for speed)
         # They also always have all the residues modeled (so we can drop that for speed)
-        full_query = base_query
-        res = full_query("polymer_entity", return_content_type=["computational"], results_verbosity='verbose')
+        # full_query = base_query
+        res = prot_seq_query("polymer_entity", return_content_type=["computational"], results_verbosity='verbose')
 
-    return res
+    print("query : ", list(res))
+    return res 
 
 
 def create_comp_models(prot_ids, prot_seqs, out_paths, overwrite=True, 

@@ -3,13 +3,28 @@ import numpy as np
 import pandas as pd
 import scipy
 import json, pickle, hashlib
+import glob, urllib.request, time
 from collections import OrderedDict
 from dataset import process_data
+from pandarallel import pandarallel
 
 from rdkit import Chem
 
 import ipdb
 
+pandarallel.initialize(progress_bar=True)
+
+# Make sure all all ligand SMILES create valid RDKit molecules
+# (some are invalid and will cause issues with the model, so we prune these out)
+def validate_smiles(smiles):
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return False
+        return True
+    except:
+        return False
+                
 def load_dataset(dataset_name, 
                  skip_pdb_dl=True,
                  allow_complexed_pdb=False,
@@ -169,17 +184,6 @@ def load_dataset(dataset_name,
             # Drop any non-finite values (usually a value of 0 in the original data)
             bdb_parsed = bdb_parsed[np.isfinite(bdb_parsed[affinity_col])]
 
-            # Make sure all all ligand SMILES create valid RDKit molecules
-            # (some are invalid and will cause issues with the model, so we prune these out)
-            def validate_smiles(smiles):
-                try:
-                    mol = Chem.MolFromSmiles(smiles)
-                    if mol is None:
-                        return False
-                    return True
-                except:
-                    return False
-                
             val_smiles = bdb_parsed['Ligand SMILES'].apply(validate_smiles)
             bdb_parsed = bdb_parsed[val_smiles]
 
@@ -247,13 +251,81 @@ def load_dataset(dataset_name,
         # 47569 interactions for 26356 ligands and 2183 proteins (with 3000 protein sequence maximum)
         affinity = interaction_df.values
 
+    elif 'belka' in dataset_name:
+        data_path = f'./data/belka_data/{dataset_name}'
+        os.makedirs(os.path.join(data_path, pdb_dir_name), exist_ok=True)
+
+        affinity_file = None
+        affinity_fname = 'train.parquet'
+        fp = os.path.join(data_path, affinity_fname)
+        if os.path.exists(fp):
+            affinity_file = fp
+
+        if affinity_file is None:
+            raise FileNotFoundError(
+                f'Could not locate BELKA affinity file in {data_path}')
+
+        proteins = {
+            'BRD4': 'GPMEQLKCCSGILKEMFAKKHAAYAWPFYKPVDVEALGLHDYCDIIKHPMDMSTIKSKLEAREYRDAQEFGADVRLMFSNCYKYNPPDHEVVAMARKLQDVFEMRFAKM',
+            'HSA': 'DAHKSEVAHRFKDLGEENFKALVLIAFAQYLQQCPFEDHVKLVNEVTEFAKTCVADESAENCDKSLHTLFGDKLCTVATLRETYGEMADCCAKQEPERNECFLQHKDDNPNLPRLVRPEVDVMCTAFHDNEETFLKKYLYEIARRHPYFYAPELLFFAKRYKAAFTECCQAADKAACLLPKLDELRDEGKASSAKQRLKCASLQKFGERAFKAWAVARLSQRFPKAEFAEVSKLVTDLTKVHTECCHGDLLECADDRADLAKYICENQDSISSKLKECCEKPLLEKSHCIAEVENDEMPADLPSLAADFVESKDVCKNYAEAKDVFLGMFLYEYARRHPDYSVVLLLRLAKTYETTLEKCCAAADPHECYAKVFDEFKPLVEEPQNLIKQNCELFEQLGEYKFQNALLVRYTKKVPQVSTPTLVEVSRNLGKVGSKCCKHPEAKRMPCAEDYLSVVLNQLCVLHEKTPVSDRVTKCCTESLVNRRPCFSALEVDETYVPKEFNAETFTFHADICTLSEKERQIKKQTALVELVKHKPKATKEQLKAVMDDFAAFVEKCCKADDKETCFAEEGKKLVAASQAALGL',
+            'sEH': 'MTLRAAVFDLDGVLALPAVFGVLGRTEEALALPRGLLNDAFQKGGPEGATTRLMKGEITLSQWIPLMEENCRKCSETAKVCLPKNFSIKEIFDKAISARKINRPMLQAALMLRKKGFTTAILTNTWLDDRAERDGLAQLMCELKMHFDFLIESCQVGMVKPEPQIYKFLLDTLKASPSEVVFLDDIGANLKPARDLGMVTILVQDTDTALKELEKVTGIQLLNTPAPLPTSCNPSDMSHGYVTVKPRVRLHFVELGSGPAVCLCHGFPESWYSWRYQIPALAQAGYRVLAMDMKGYGESSAPPEIEEYCMEVLCKEMVTFLDKLGLSQAVFIGHDWGGMLVWYMALFYPERVRAVASLNTPFIPANPNMSPLESIKANPVFDYQLYFQEPGVAEAELEQNLSRTFKSLFRASDESVLSMHKVCEAGGLFVNSPEEPSLSRMVTEEEIQFYVQQFKKSGFRGPLNWYRNMERNWKWACKSLGRKILIPALMVTAEKDFVLVPQMSQHMEDWIPHLKRGHIEDCGHWTQMDKPTEVNQILIKWLDSDARNPPVVSKM',
+        }
+        known_pdb_ids = ['7USK', '1AO6', '3i28']
+
+        # If the parsed file for this task already exists, load it to avoid reprocessing
+        belka_parsed_file = os.path.join(data_path, f'{affinity_fname}_parsed.pkl')
+        belka_parsed_ligands = os.path.join(data_path, f'{affinity_fname}_parsed_ligands.pkl')
+        belka_parsed_affinity = os.path.join(data_path, f'{affinity_fname}_parsed_affinity.pkl')
+
+        if os.path.exists(belka_parsed_ligands) and os.path.exists(belka_parsed_affinity):
+            print("Found pickled ligands and affinity")
+            with open(belka_parsed_ligands, 'rb') as file:
+                ligands = pickle.load(file)
+            with open(belka_parsed_affinity, 'rb') as file:
+                affinity = pickle.load(file)
+        else:
+            if os.path.exists(belka_parsed_file):
+                print("Found pickled parsed training file")
+                data_df = pd.read_pickle(belka_parsed_file)
+            else:
+                data_df = pd.read_parquet(affinity_file)
+                #data_df = data_df.sample(n=100000)
+
+                print("filtering belka columns")
+                data_df = data_df[['molecule_smiles', 'protein_name', 'binds']]
+                print("filtering valid smiles")
+                val_smiles = data_df['molecule_smiles'].parallel_apply(validate_smiles)
+                data_df = data_df[val_smiles]
+                data_df.to_pickle(belka_parsed_file)
+
+            print("constructing unique ligs")
+            unique_ligs  = data_df['molecule_smiles'].sort_values().unique()
+
+            # We use the fact that enumerate and unique_ligs will have the same sorted order
+            print("constructing ligands map")
+            ligands = {
+                i: lig
+                for (i, lig) in enumerate(unique_ligs)
+            }
+
+            with open(belka_parsed_ligands, 'wb') as bplf:
+                pickle.dump(ligands, bplf)
+
+            print("creating affinity matrix with pivot")
+            data_df = data_df.pivot(index="molecule_smiles", columns="protein_name", values='binds')
+            affinity = data_df.values
+            with open(belka_parsed_affinity, 'wb') as bpaf:
+                pickle.dump(affinity, bpaf)
+            
 
     else:
         raise ValueError(f"Dataset name {dataset_name} not recognized")
 
 
+    print("Done loading data, processing")
     data_df = process_data.process_data(proteins, ligands, affinity,
                                         data_path, 
+                                        known_pdb_ids,
                                         pdb_dir_name=pdb_dir_name,
                                         skip_pdb_dl=skip_pdb_dl,
                                         allow_complexed_pdb=allow_complexed_pdb, 

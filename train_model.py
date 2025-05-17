@@ -84,9 +84,9 @@ seed_everything_reproducibility(seed_val, force_cuda_determinism, error_on_nonde
 load_dataset_kwargs = {
     'skip_pdb_dl': False,
     'allow_complexed_pdb': False,
-    'create_comp': True,
+    'create_comp': False,
     'reverse_comp_fold_order': False,
-    'verbose_pdb_dl': False,
+    'verbose_pdb_dl': True,
     'verbose_comp_fold': True,
     'do_mostcommon_filter': False,
     'do_proteinseqdupe_filter': False,
@@ -146,7 +146,7 @@ if(not os.path.exists(dataset_path)):
     torch.save(dataset, dataset_path)
 else:
     print(f"Preprocessed dataset found - loading from {dataset_path}...", flush=True)
-    dataset = torch.load(dataset_path)
+    dataset = torch.load(dataset_path, weights_only=False)
 
 print("--Full dataset details--")
 print(dataset)
@@ -240,7 +240,7 @@ g.manual_seed(seed_val)
 if dataset_name == 'kiba':
     bsize_max_num = 8000000
     max_bsize = 64
-elif dataset_name == 'bindingdb':
+elif dataset_name == 'bindingdb' or dataset_name == 'belka':
     bsize_max_num = 4000000
     max_bsize = 32
 else:

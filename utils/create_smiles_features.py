@@ -1,5 +1,6 @@
 import numpy as np
 import utils.smiles_definitions as smiles_maps
+from rdkit.Chem.rdchem import ValenceType
 
 import ipdb
 
@@ -26,7 +27,7 @@ def compute_atom_node_features(rdk_mol, one_hot_ordinal_feats, include_gasteiger
         atom_feats.extend(smiles_maps.SMILES_HYBRID_MAP[str(atom.GetHybridization())])
         atom_feats.extend(smiles_maps.SMILES_H_MAP[atom.GetTotalNumHs()])
         atom_feats.extend(smiles_maps.SMILES_DEGREE_MAP[atom.GetDegree()])
-        atom_feats.extend(smiles_maps.SMILES_VALENCE_MAP[atom.GetImplicitValence()])
+        atom_feats.extend(smiles_maps.SMILES_VALENCE_MAP[atom.GetValence(ValenceType.IMPLICIT)])
 
         if(one_hot_ordinal_feats):
             atom_feats.extend(smiles_maps.SMILES_CHARGE_MAP[atom.GetFormalCharge()])
